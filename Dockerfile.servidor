@@ -1,0 +1,40 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      nftables \
+      python3 \
+      openssh-server \
+      suricata \
+      suricata-update \
+      iproute2 \
+      procps \
+      ca-certificates \
+      curl \
+      jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# SSH del servidor: sirve para demostrar que el puerto 22 sigue permitido
+# mientras el resto de puertos quedan filtrados por la politica drop.
+RUN ssh-keygen -A \
+    && echo 'root:tp5lab' | chpasswd \
+    && sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && mkdir -p /run/sshd
+
+# Servicio web "interno" que se publicara con DNAT en la Parte B.
+RUN mkdir -p /srv/www \
+    && printf '<!doctype html>\n<title>TP5</title>\n<h1>TP5 - servicio publicado con DNAT</h1>\n<p>Servidor: 10.0.0.10 - puerto interno 8000</p>\n' > /srv/www/index.html
+
+# Reglas Suricata: se descargan las ET Open con suricata-update (congeladas en
+# la imagen) y se agrega una regla local de respaldo para el escaneo nmap.
+COPY suricata/local.rules /var/lib/suricata/rules/local.rules
+COPY suricata/configure.py /tmp/configure_suricata.py
+RUN python3 /tmp/configure_suricata.py /etc/suricata/suricata.yaml \
+    && (suricata-update || true) \
+    && { test -s /var/lib/suricata/rules/suricata.rules \
+         || printf '# ET Open no disponible en el build: se usa local.rules\n' > /var/lib/suricata/rules/suricata.rules; } \
+    && chmod 644 /var/lib/suricata/rules/*.rules
+
+# Suricata necesita escribir fast.log / eve.json aqui.
+RUN mkdir -p /var/log/suricata

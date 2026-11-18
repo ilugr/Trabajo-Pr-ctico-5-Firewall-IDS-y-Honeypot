@@ -1,0 +1,13 @@
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      nmap \
+      curl \
+      openssh-client \
+      sshpass \
+      iputils-ping \
+      netcat-openbsd \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
